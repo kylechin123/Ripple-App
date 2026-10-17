@@ -3,19 +3,11 @@
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { clearInviteIssue, readInvite, readInviteIssue, useApp } from "@/components/AppProvider";
+import { PreferencePicker } from "@/components/PreferencePicker";
 import { Button, Card, Chip, ConfigError, ErrorNote, Spinner } from "@/components/ui";
+import { DISLIKES, INTEREST_GROUPS, SKILLS, TIMES } from "@/data/preferences";
 import { getPosition } from "@/lib/client-utils";
 import type { Permissions } from "@/lib/types";
-
-const INTERESTS = ["Nature", "Sports", "Art & design", "Coding", "Music", "Food", "Animals", "Gaming", "Photography", "Reading", "Fashion", "Science"];
-const SKILLS = ["Design", "Writing", "Coding", "Organizing", "Teaching", "Languages", "Social media", "Building things", "Public speaking", "Photography"];
-const DISLIKES = ["Crowds", "Getting dirty", "Talking to strangers", "Early mornings", "Long walks", "Screens"];
-const TIMES = [
-  { label: "< 30 min / week", value: 30 },
-  { label: "1 hour / week", value: 60 },
-  { label: "2–3 hours / week", value: 150 },
-  { label: "5+ hours / week", value: 300 },
-];
 
 const PERMISSIONS: { key: keyof Permissions; title: string; why: string; real: boolean }[] = [
   { key: "location", title: "Location", why: "Finds issues and events near you, and checks you're on site for location quests. Used per request, never stored.", real: true },
@@ -25,10 +17,6 @@ const PERMISSIONS: { key: keyof Permissions; title: string; why: string; real: b
 ];
 
 const STEPS = ["You", "Interests", "Skills", "Dislikes", "Time", "Permissions"];
-
-function toggle(list: string[], v: string) {
-  return list.includes(v) ? list.filter((x) => x !== v) : [...list, v];
-}
 
 export default function Onboarding() {
   const { ready, configError, profile, api, refresh } = useApp();
@@ -148,35 +136,11 @@ export default function Onboarding() {
           </>
         )}
 
-        {step === 1 && (
-          <div className="flex flex-wrap gap-2">
-            {INTERESTS.map((i) => (
-              <Chip key={i} active={interests.includes(i)} onClick={() => setInterests(toggle(interests, i))}>
-                {i}
-              </Chip>
-            ))}
-          </div>
-        )}
+        {step === 1 && <PreferencePicker groups={INTEREST_GROUPS} value={interests} onChange={setInterests} addPlaceholder="Something else? e.g. Birdwatching" />}
 
-        {step === 2 && (
-          <div className="flex flex-wrap gap-2">
-            {SKILLS.map((i) => (
-              <Chip key={i} active={skills.includes(i)} onClick={() => setSkills(toggle(skills, i))}>
-                {i}
-              </Chip>
-            ))}
-          </div>
-        )}
+        {step === 2 && <PreferencePicker options={SKILLS} value={skills} onChange={setSkills} addPlaceholder="Another skill? e.g. Sign language" />}
 
-        {step === 3 && (
-          <div className="flex flex-wrap gap-2">
-            {DISLIKES.map((i) => (
-              <Chip key={i} active={dislikes.includes(i)} onClick={() => setDislikes(toggle(dislikes, i))}>
-                {i}
-              </Chip>
-            ))}
-          </div>
-        )}
+        {step === 3 && <PreferencePicker options={DISLIKES} value={dislikes} onChange={setDislikes} addPlaceholder="Anything else to avoid?" />}
 
         {step === 4 && (
           <>

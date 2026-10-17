@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { useApp } from "@/components/AppProvider";
 import { Button, Card, ErrorNote, Gate, Stat, TopBar } from "@/components/ui";
@@ -166,18 +167,41 @@ function ProfileInner() {
         ))}
       </Card>
 
-      <Card className="mb-4 space-y-2">
-        <h2 className="font-semibold">Your interests</h2>
-        <p className="text-sm text-muted">{[...profile.interests, ...profile.skills].join(" · ") || "None yet"}</p>
-        {Object.keys(profile.category_weights ?? {}).length > 0 && (
-          <p className="text-xs text-muted">
-            Learned preferences:{" "}
-            {Object.entries(profile.category_weights)
-              .sort((a, b) => b[1] - a[1])
-              .map(([c, w]) => `${c} ${w > 0 ? "+" : ""}${w}`)
-              .join(", ")}
-          </p>
-        )}
+      <Card className="mb-4 space-y-3">
+        <div className="flex items-center justify-between">
+          <h2 className="font-semibold">Your preferences</h2>
+          <Link href="/profile/preferences">
+            <Button variant="soft" className="px-3 py-1.5 text-xs">
+              Edit
+            </Button>
+          </Link>
+        </div>
+        {(
+          [
+            ["Interests", profile.interests],
+            ["Skills", profile.skills],
+            ["Avoiding", profile.dislikes],
+          ] as const
+        ).map(([label, list]) => (
+          <div key={label}>
+            <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-muted">{label}</p>
+            {list.length ? (
+              <div className="flex flex-wrap gap-1.5">
+                {list.map((v) => (
+                  <span key={v} className="rounded-full bg-surface-2 px-2.5 py-1 text-xs">
+                    {v}
+                  </span>
+                ))}
+              </div>
+            ) : (
+              <p className="text-xs text-muted">None yet</p>
+            )}
+          </div>
+        ))}
+        <p className="text-xs text-muted">
+          ⏱ About {profile.weekly_minutes >= 60 ? `${Math.round(profile.weekly_minutes / 6) / 10} h` : `${profile.weekly_minutes} min`} per week
+          {profile.ward ? ` · Ward ${profile.ward}` : ""}
+        </p>
       </Card>
 
       {process.env.NEXT_PUBLIC_DEMO_MODE === "true" && (

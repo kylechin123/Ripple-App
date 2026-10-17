@@ -4,6 +4,7 @@ import { DEMO_QUESTS } from "@/data/demo-quests";
 import { generateQuestSet, type GeneratedSet } from "@/lib/ai/quests";
 import { generateQuiz, type Quiz } from "@/lib/ai/quiz";
 import { hasAnthropicKey, isDemoMode } from "@/lib/ai/client";
+import { preferenceScore } from "@/data/preferences";
 import { distanceMeters } from "@/lib/geo";
 import { basePoints, clampRubric, computeAward, difficultyOf, type Rubric, type TaskType, type Tier } from "@/lib/points";
 import { HttpError, supabaseAdmin } from "@/lib/supabase/server";
@@ -23,6 +24,11 @@ const aiEnabled = () => !isDemoMode() && hasAnthropicKey();
 
 // ---------- Issue selection ----------
 
+/** How well an issue fits the user: learned topic weight + interests/skills/dislikes (see src/data/preferences.ts). */
+export function affinity(profile: Profile, issue: Issue) {
+  return (profile.category_weights?.[issue.category] ?? 0) + preferenceScore(profile, issue.category);
+}
+
 export async function candidateIssues(profile: Profile, loc: { lat: number; lng: number } | null): Promise<Issue[]> {
   const { data, error } = await db().from("issues").select("*");
   if (error) throw error;
@@ -35,8 +41,8 @@ export async function candidateIssues(profile: Profile, loc: { lat: number; lng:
       .sort((a, b) => distanceMeters(loc.lat, loc.lng, a.lat!, a.lng!) - distanceMeters(loc.lat, loc.lng, b.lat!, b.lng!))
       .slice(0, 8);
   }
-  const weight = (i: Issue) => profile.category_weights?.[i.category] ?? 0;
-  return [...issues].sort((a, b) => weight(b) - weight(a) || (a.seeded_from === "hand" ? -1 : 1)).slice(0, 8);
+  const handFirst = (i: Issue) => (i.seeded_from === "hand" ? 1 : 0);
+  return [...issues].sort((a, b) => affinity(profile, b) - affinity(profile, a) || handFirst(b) - handFirst(a)).slice(0, 8);
 }
 
 // ---------- Quest set creation ----------
@@ -53,7 +59,9 @@ async function recentlySkippedSlugs(userId: string): Promise<string[]> {
   return [...new Set(slugs)];
 }
 
-function demoSetFor(candidates: Issue[], avoid: string[]): GeneratedSet | null {
+function demoSetFor(profile: Profile, candidates: Issue[], avoid: string[]): GeneratedSet | null {
+  // Stable sort: best fit first, original (distance) order breaks ties.
+  candidates = [...candidates].sort((a, b) => affinity(profile, b) - affinity(profile, a));
   const pick = candidates.find((i) => DEMO_QUESTS[i.slug] && !avoid.includes(i.slug)) ?? candidates.find((i) => DEMO_QUESTS[i.slug]);
   return pick ? DEMO_QUESTS[pick.slug].set : null;
 }
@@ -150,7 +158,7 @@ export async function createQuestSet(profile: Profile, loc: { lat: number; lng: 
       console.error("Quest generation failed; falling back to demo quests", err);
     }
   }
-  set ??= demoSetFor(candidates, avoid);
+  set ??= demoSetFor(profile, candidates, avoid);
   if (!set) throw new HttpError(409, "You already have quests for every issue near you. Finish one to unlock more.");
 
   // Count toward the daily cap only once a set is actually being created.
