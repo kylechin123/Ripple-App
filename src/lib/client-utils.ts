@@ -48,13 +48,36 @@ export function renderBrief(md: string) {
   const esc = md.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
   const inline = (s: string) => s.replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>").replace(/\*(.+?)\*/g, "<em>$1</em>");
   const blocks = esc.split(/\n{2,}/);
+  const bullet = /^\s*[-*]\s+/;
   return blocks
     .map((b) => {
-      const lines = b.split("\n");
-      if (lines.every((l) => /^\s*[-*]\s+/.test(l))) return `<ul>${lines.map((l) => `<li>${inline(l.replace(/^\s*[-*]\s+/, ""))}</li>`).join("")}</ul>`;
-      const h = b.match(/^(#{1,3})\s+(.*)$/);
-      if (h) return `<h3>${inline(h[2])}</h3>`;
-      return `<p>${inline(lines.join("<br/>"))}</p>`;
+      // A block can mix plain lines and bullets ("How people help:\n- a\n- b"): group consecutive runs.
+      const out: string[] = [];
+      let para: string[] = [];
+      let items: string[] = [];
+      const flushPara = () => {
+        if (!para.length) return;
+        const h = para.length === 1 ? para[0].match(/^(#{1,3})\s+(.*)$/) : null;
+        out.push(h ? `<h3>${inline(h[2])}</h3>` : `<p>${inline(para.join("<br/>"))}</p>`);
+        para = [];
+      };
+      const flushList = () => {
+        if (!items.length) return;
+        out.push(`<ul>${items.map((l) => `<li>${inline(l)}</li>`).join("")}</ul>`);
+        items = [];
+      };
+      for (const line of b.split("\n")) {
+        if (bullet.test(line)) {
+          flushPara();
+          items.push(line.replace(bullet, ""));
+        } else {
+          flushList();
+          para.push(line);
+        }
+      }
+      flushPara();
+      flushList();
+      return out.join("");
     })
     .join("");
 }

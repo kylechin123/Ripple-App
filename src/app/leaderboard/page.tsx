@@ -5,19 +5,22 @@ import { useEffect, useState } from "react";
 import { useApp } from "@/components/AppProvider";
 import { ImpactCard } from "@/components/ImpactCard";
 import { Button, Card, ErrorNote, Gate, Spinner, TopBar } from "@/components/ui";
+import { useI18n } from "@/i18n";
+import type { MessageKey } from "@/i18n/en";
 
 type Scope = "global" | "squad" | "squads" | "wards";
 type Row = { id?: string; username?: string; name?: string; ward?: number | null; squad_name?: string | null; members?: number; xp: number };
 
-const SCOPES: { key: Scope; label: string }[] = [
-  { key: "global", label: "Global" },
-  { key: "squad", label: "My squad" },
-  { key: "squads", label: "Squads" },
-  { key: "wards", label: "Wards" },
+const SCOPES: { key: Scope; label: MessageKey }[] = [
+  { key: "global", label: "lb.global" },
+  { key: "squad", label: "lb.mySquad" },
+  { key: "squads", label: "lb.squads" },
+  { key: "wards", label: "lb.wards" },
 ];
 
 function LeaderboardInner() {
   const { api } = useApp();
+  const { t, lang } = useI18n();
   const [scope, setScope] = useState<Scope>("global");
   const [period, setPeriod] = useState<"month" | "all">("month");
   const key = `${scope}:${period}`;
@@ -35,30 +38,30 @@ function LeaderboardInner() {
     };
   }, [api, scope, period]);
 
-  const monthName = new Date().toLocaleString("en-CA", { month: "long" });
+  const monthName = new Date().toLocaleString(lang === "en" ? "en-CA" : lang, { month: "long" });
 
   return (
     <>
-      <TopBar title="Leaderboard" />
+      <TopBar title={t("lb.title")} />
       <div className="mb-4">
         <ImpactCard />
       </div>
-      <Card className="mb-4 bg-gradient-to-br from-amber-100 to-amber-50 text-amber-900 dark:from-amber-950 dark:to-amber-900 dark:text-amber-100">
-        <p className="text-sm font-semibold">🏆 {monthName} prizes</p>
-        <p className="mt-1 text-xs">Top 3 squads this month win a pizza night from local sponsors. Top person wins a $50 gift card. (Demo prizes.)</p>
+      <Card className="mb-4 border-transparent bg-gradient-to-br from-amber-200 via-orange-200 to-pink-200 text-[#5b1d0a]">
+        <p className="text-sm font-bold">🏆 {t("lb.prizes", { month: monthName })}</p>
+        <p className="mt-1 text-xs">{t("lb.prizesBody")}</p>
       </Card>
 
-      <div className="mb-3 flex gap-1 rounded-xl bg-surface-2 p-1">
+      <div className="mb-3 flex gap-1 rounded-2xl bg-surface-2 p-1">
         {SCOPES.map((s) => (
-          <button key={s.key} onClick={() => setScope(s.key)} className={`flex-1 rounded-lg py-2 text-sm font-semibold ${scope === s.key ? "bg-surface shadow-sm" : "text-muted"}`}>
-            {s.label}
+          <button key={s.key} onClick={() => setScope(s.key)} className={`flex-1 rounded-xl py-2 text-xs font-bold transition ${scope === s.key ? "bg-grad text-white shadow" : "text-muted"}`}>
+            {t(s.label)}
           </button>
         ))}
       </div>
       <div className="mb-4 flex justify-end gap-2 text-xs">
         {(["month", "all"] as const).map((p) => (
           <button key={p} onClick={() => setPeriod(p)} className={`rounded-full px-3 py-1 ${period === p ? "bg-brand text-white" : "bg-surface-2 text-muted"}`}>
-            {p === "month" ? "This month" : "All time"}
+            {p === "month" ? t("lb.thisMonth") : t("lb.allTime")}
           </button>
         ))}
       </div>
@@ -69,26 +72,26 @@ function LeaderboardInner() {
       ) : data.noSquad ? (
         <Card className="text-center">
           <p className="text-3xl">👥</p>
-          <p className="mt-2 font-semibold">You&apos;re not in a squad yet</p>
-          <p className="mt-1 text-sm text-muted">Join or create one to compete with friends.</p>
+          <p className="mt-2 font-semibold">{t("lb.noSquad")}</p>
+          <p className="mt-1 text-sm text-muted">{t("lb.noSquadBody")}</p>
           <Link href="/profile">
-            <Button className="mt-4 w-full">Join a squad</Button>
+            <Button variant="fun" className="mt-4 w-full">{t("lb.joinSquad")}</Button>
           </Link>
         </Card>
       ) : (
         <Card className="divide-y divide-line p-0">
-          {data.rows.length === 0 && <p className="p-4 text-sm text-muted">No one here yet.</p>}
+          {data.rows.length === 0 && <p className="p-4 text-sm text-muted">{t("lb.empty")}</p>}
           {data.rows.map((r, i) => {
             const people = scope === "global" || scope === "squad";
             const mine = (people && r.id === data.me.id) || (scope === "squads" && r.id === data.me.squad_id) || (scope === "wards" && r.ward === data.me.ward);
-            const name = people ? r.username : scope === "squads" ? r.name : `Ward ${r.ward}`;
-            const sub = scope === "squad" ? "" : people ? r.squad_name ?? (r.ward ? `Ward ${r.ward}` : "") : `${r.members ?? 0} members`;
+            const name = people ? r.username : scope === "squads" ? r.name : t("common.ward", { n: r.ward ?? "?" });
+            const sub = scope === "squad" ? "" : people ? r.squad_name ?? (r.ward ? t("common.ward", { n: r.ward }) : "") : t("lb.members", { n: r.members ?? 0 });
             return (
               <div key={r.id ?? r.ward ?? i} className={`flex items-center gap-3 px-4 py-3 ${mine ? "bg-brand-soft" : ""}`}>
                 <span className="w-6 text-center font-bold tabular-nums text-muted">{i < 3 ? ["🥇", "🥈", "🥉"][i] : i + 1}</span>
                 <div className="min-w-0 flex-1">
                   <p className="truncate font-medium">
-                    {name} {mine && <span className="text-xs text-brand">(you)</span>}
+                    {name} {mine && <span className="text-xs text-brand">{t("lb.you")}</span>}
                   </p>
                   {sub && <p className="truncate text-xs text-muted">{sub}</p>}
                 </div>

@@ -1,7 +1,8 @@
 import type { Metadata, Viewport } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
+import { Fredoka, Geist, Geist_Mono } from "next/font/google";
 import { Suspense } from "react";
 import { AppProvider } from "@/components/AppProvider";
+import { I18nProvider } from "@/i18n";
 import { BottomNav } from "@/components/ui";
 import "./globals.css";
 
@@ -15,6 +16,12 @@ const geistMono = Geist_Mono({
   subsets: ["latin"],
 });
 
+const fredoka = Fredoka({
+  variable: "--font-fredoka",
+  subsets: ["latin"],
+  weight: ["500", "600", "700"],
+});
+
 export const metadata: Metadata = {
   title: "Ripple",
   description: "Turn 'I should help' into 'I helped': personalized, verified, local quests for Markham and York Region.",
@@ -26,15 +33,16 @@ export const viewport: Viewport = {
   initialScale: 1,
   viewportFit: "cover",
   themeColor: [
-    { media: "(prefers-color-scheme: light)", color: "#f6faf9" },
-    { media: "(prefers-color-scheme: dark)", color: "#0b1413" },
+    { media: "(prefers-color-scheme: light)", color: "#fbf7ff" },
+    { media: "(prefers-color-scheme: dark)", color: "#120a22" },
   ],
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
-    <html lang="en" className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}>
+    <html lang="en" className={`${geistSans.variable} ${geistMono.variable} ${fredoka.variable} h-full antialiased`}>
       <body className="min-h-full font-sans">
+        <I18nProvider>
         <AppProvider>
           {/* Pages read URL data (params, pathname) at runtime, so they stream in after the static shell. */}
           <main className="mx-auto min-h-screen max-w-md px-4 pb-28">
@@ -44,6 +52,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
             <BottomNav />
           </Suspense>
         </AppProvider>
+        </I18nProvider>
       </body>
     </html>
   );

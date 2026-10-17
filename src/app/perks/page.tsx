@@ -4,12 +4,14 @@ import { QRCodeSVG } from "qrcode.react";
 import { useCallback, useEffect, useState } from "react";
 import { useApp } from "@/components/AppProvider";
 import { Button, Card, ErrorNote, Gate, Spinner, TopBar } from "@/components/ui";
+import { useT } from "@/i18n";
 
 type Perk = { id: string; business: string; title: string; description: string; coin_cost: number; emoji: string };
 type Redemption = { id: string; code: string; created_at: string; perks: { business: string; title: string; emoji: string } | null };
 
 function PerksInner() {
   const { api, refresh } = useApp();
+  const t = useT();
   const [data, setData] = useState<{ perks: Perk[]; redemptions: Redemption[]; coins: number; xp: number } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [justRedeemed, setJustRedeemed] = useState<{ code: string; perk: Perk } | null>(null);
@@ -51,13 +53,13 @@ function PerksInner() {
 
   return (
     <>
-      <TopBar title="Local perks" />
-      <p className="mb-4 text-sm text-muted">Spend coins at Markham businesses. Spending never lowers your XP or rank.</p>
+      <TopBar title={t("perks.title")} />
+      <p className="mb-4 text-sm text-muted">{t("perks.intro")}</p>
       <ErrorNote message={error} />
 
       {justRedeemed && (
         <Card className="animate-pop mb-4 border-brand text-center">
-          <p className="text-sm font-semibold text-brand">Redeemed!</p>
+          <p className="text-sm font-bold text-brand">🎉 {t("perks.redeemed")}</p>
           <p className="mt-1 font-bold">
             {justRedeemed.perk.emoji} {justRedeemed.perk.title}
           </p>
@@ -66,7 +68,7 @@ function PerksInner() {
             <QRCodeSVG value={justRedeemed.code} size={150} />
           </div>
           <p className="mt-2 font-mono text-sm">{justRedeemed.code}</p>
-          <p className="mt-1 text-xs text-muted">Show this at the counter. Your XP is still {data.xp.toLocaleString()}.</p>
+          <p className="mt-1 text-xs text-muted">{t("perks.showCounter", { xp: data.xp.toLocaleString() })}</p>
         </Card>
       )}
 
@@ -94,7 +96,7 @@ function PerksInner() {
 
       {data.redemptions.length > 0 && (
         <section className="mt-6">
-          <h3 className="mb-2 text-sm font-semibold text-muted">Your codes</h3>
+          <h3 className="mb-2 text-sm font-semibold text-muted">{t("perks.yourCodes")}</h3>
           <div className="space-y-2">
             {data.redemptions.map((r) => (
               <div key={r.id} className="flex items-center gap-2 text-sm">
@@ -106,7 +108,7 @@ function PerksInner() {
           </div>
         </section>
       )}
-      <p className="mt-6 text-center text-xs text-muted">Businesses shown are mock partners for the demo.</p>
+      <p className="mt-6 text-center text-xs text-muted">{t("perks.mock")}</p>
     </>
   );
 }

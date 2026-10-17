@@ -2,33 +2,48 @@
 
 @custom-variant dark (@media (prefers-color-scheme: dark));
 
+/* Bright & playful: purple → pink → orange, chunky shapes, glowing blobs. */
 :root {
-  --bg: #f6faf9;
+  --bg: #fbf7ff;
   --surface: #ffffff;
-  --surface-2: #eef4f3;
-  --line: #dbe6e4;
-  --fg: #0f1f1d;
-  --muted: #5b6e6b;
-  --brand: #0d9488;
-  --brand-strong: #0b7c72;
-  --brand-soft: #ccfbef;
-  --brand-ink: #0b4f49;
-  --gold: #d97706;
+  --surface-2: #f3ecff;
+  --line: #e7dcfb;
+  --fg: #1e1033;
+  --muted: #6b5a86;
+  --brand: #7c3aed;
+  --brand-strong: #5b21b6;
+  --brand-soft: #ede4ff;
+  --brand-ink: #4c1d95;
+  --pink: #ec4899;
+  --accent: #f97316;
+  --accent-soft: #ffedd5;
+  --gold: #f59e0b;
+  --grad: linear-gradient(135deg, #7c3aed 0%, #db2777 55%, #f97316 100%);
+  --blob-1: #c4b5fd;
+  --blob-2: #fbcfe8;
+  --blob-3: #fed7aa;
 }
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --bg: #0b1413;
-    --surface: #111d1c;
-    --surface-2: #182826;
-    --line: #233533;
-    --fg: #e6f2f0;
-    --muted: #93a8a5;
-    --brand: #2dd4bf;
-    --brand-strong: #5eead4;
-    --brand-soft: #123c37;
-    --brand-ink: #99f6e4;
+    --bg: #120a22;
+    --surface: #1c1233;
+    --surface-2: #261a42;
+    --line: #35265a;
+    --fg: #f5efff;
+    --muted: #b3a5d1;
+    --brand: #a78bfa;
+    --brand-strong: #7c3aed;
+    --brand-soft: #2e1d55;
+    --brand-ink: #ddd0ff;
+    --pink: #f472b6;
+    --accent: #fb923c;
+    --accent-soft: #3b2214;
     --gold: #fbbf24;
+    --grad: linear-gradient(135deg, #7c3aed 0%, #db2777 55%, #f97316 100%);
+    --blob-1: #4c1d95;
+    --blob-2: #831843;
+    --blob-3: #7c2d12;
   }
 }
 
@@ -43,14 +58,65 @@
   --color-brand-strong: var(--brand-strong);
   --color-brand-soft: var(--brand-soft);
   --color-brand-ink: var(--brand-ink);
+  --color-pink: var(--pink);
+  --color-accent: var(--accent);
+  --color-accent-soft: var(--accent-soft);
   --color-gold: var(--gold);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
+  --font-display: var(--font-fredoka), var(--font-geist-sans);
 }
 
 body {
   background: var(--bg);
   color: var(--fg);
+  overflow-x: hidden;
+}
+
+/* Soft glowing blobs behind everything. Fixed, so content scrolls over them. */
+body::before {
+  content: "";
+  position: fixed;
+  inset: -20vmax;
+  z-index: -1;
+  pointer-events: none;
+  background:
+    radial-gradient(35vmax 35vmax at 15% 10%, var(--blob-1), transparent 70%),
+    radial-gradient(30vmax 30vmax at 90% 25%, var(--blob-2), transparent 70%),
+    radial-gradient(35vmax 35vmax at 60% 95%, var(--blob-3), transparent 70%);
+  opacity: 0.55;
+  animation: drift 24s ease-in-out infinite alternate;
+}
+@keyframes drift {
+  from { transform: translate3d(0, 0, 0) rotate(0deg); }
+  to { transform: translate3d(-3vmax, 2vmax, 0) rotate(8deg); }
+}
+@media (prefers-reduced-motion: reduce) {
+  body::before { animation: none; }
+}
+
+h1, h2, h3, .font-display {
+  font-family: var(--font-display);
+  letter-spacing: -0.01em;
+}
+
+.bg-grad { background: var(--grad); }
+.text-grad {
+  background: var(--grad);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+/* Chunky "pressable" buttons. */
+.btn-chunky {
+  box-shadow: 0 4px 0 0 var(--brand-strong);
+  transform: translateY(0);
+  transition: transform 0.08s ease, box-shadow 0.08s ease, filter 0.15s ease;
+}
+.btn-chunky:active:not(:disabled) {
+  transform: translateY(3px);
+  box-shadow: 0 1px 0 0 var(--brand-strong);
 }
 
 .prose-brief h1,
@@ -79,4 +145,18 @@ body {
 }
 .animate-pop {
   animation: pop 0.5s ease-out both;
+}
+
+@keyframes wiggle {
+  0%, 100% { transform: rotate(0deg); }
+  25% { transform: rotate(-8deg); }
+  75% { transform: rotate(8deg); }
+}
+.animate-wiggle { animation: wiggle 0.6s ease-in-out; }
+
+/* Printable pages (volunteer hours). */
+@media print {
+  body::before, nav, .no-print { display: none !important; }
+  body { background: #fff; color: #000; }
+  main { max-width: none !important; padding: 0 !important; }
 }

@@ -2,10 +2,14 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
+import { StreakPill, useAchievements } from "@/components/Achievements";
 import { clearInviteIssue, readInvite, readInviteIssue, useApp } from "@/components/AppProvider";
 import { ImpactCard } from "@/components/ImpactCard";
+import { IssueArt } from "@/components/IssueArt";
 import { Button, Card, ErrorNote, Gate, Spinner, TopBar } from "@/components/ui";
+import { useT } from "@/i18n";
 import { getPosition } from "@/lib/client-utils";
+import { TIER_META } from "@/lib/tiers";
 import type { Issue, Quest } from "@/lib/types";
 
 type QuestSet = { setId: string; issue: Issue; matchReason: string | null; quests: Quest[] };
@@ -13,53 +17,55 @@ type Feed = {
   sets: QuestSet[];
   maxActive: number;
   newLeftToday: number;
-  completed: { id: string; title: string; tier: string; completed_at: string }[];
+  completed: { id: string; title: string; tier: Quest["tier"]; completed_at: string }[];
 };
-
-const TIER_META = {
-  learn: { label: "Learn", icon: "📖" },
-  act: { label: "Act", icon: "🛠️" },
-  lead: { label: "Lead", icon: "📣" },
-} as const;
 
 const CATEGORY_ICON: Record<string, string> = { environment: "🌿", food: "🥫", newcomers: "🤝", accessibility: "♿" };
 
 function SetCard({ set, onSkip }: { set: QuestSet; onSkip: () => void }) {
+  const t = useT();
   const done = set.quests.filter((q) => q.status === "completed").length;
   return (
-    <Card className="space-y-3">
-      <div className="flex items-start justify-between gap-2">
-        <div className="min-w-0">
-          <p className="text-xs font-semibold uppercase tracking-wide text-brand">
-            {CATEGORY_ICON[set.issue.category] ?? "📍"} {set.issue.ward ? `Ward ${set.issue.ward}` : "York Region"} · {done}/3 done
-          </p>
-          <h2 className="mt-1 text-lg font-bold leading-snug">{set.issue.title}</h2>
-          {set.matchReason && <p className="mt-1 text-sm text-muted">{set.matchReason}</p>}
-        </div>
-        <Button variant="ghost" className="shrink-0 px-2 py-1 text-xs" onClick={onSkip}>
-          Skip
-        </Button>
+    <Card className="space-y-3 overflow-hidden p-0">
+      <div className="relative">
+        <IssueArt category={set.issue.category} className="h-28 w-full" />
+        <span className="absolute left-3 top-3 rounded-full bg-white/90 px-2.5 py-1 text-[11px] font-bold text-brand-strong shadow">
+          {CATEGORY_ICON[set.issue.category] ?? "📍"} {set.issue.ward ? t("common.ward", { n: set.issue.ward }) : t("common.yorkRegion")}
+        </span>
+        <span className="absolute right-3 top-3 rounded-full bg-black/35 px-2.5 py-1 text-[11px] font-bold text-white backdrop-blur">{t("home.doneOf", { done })}</span>
+        <button type="button" onClick={onSkip} className="absolute bottom-2 right-3 rounded-full bg-white/85 px-2.5 py-1 text-[11px] font-semibold text-muted shadow hover:bg-white">
+          {t("common.skip")}
+        </button>
+      </div>
+      <div className="px-4">
+        <h2 className="text-lg font-bold leading-snug">{set.issue.title}</h2>
+        {set.matchReason && <p className="mt-1 text-sm text-muted">{set.matchReason}</p>}
+      </div>
+      <div className="mx-4 h-1 overflow-hidden rounded-full bg-surface-2">
+        <div className="h-full bg-grad transition-all" style={{ width: `${(done / 3) * 100}%` }} />
       </div>
 
-      <div className="space-y-2">
+      <div className="space-y-2 px-4 pb-4">
         {set.quests.map((q) => {
           const meta = TIER_META[q.tier];
           const isDone = q.status === "completed";
           const started = q.status === "accepted";
           return (
             <Link key={q.id} href={`/quest/${q.id}`} className="block">
-              <div className={`flex items-center gap-3 rounded-xl border p-3 transition ${isDone ? "border-brand bg-brand-soft" : "border-line bg-surface hover:border-brand"}`}>
-                <span className="text-2xl" aria-hidden>
+              <div
+                className={`flex items-center gap-3 rounded-2xl border-2 p-3 transition hover:-translate-y-0.5 ${isDone ? "border-transparent bg-brand-soft" : "border-line bg-surface hover:border-brand"}`}
+              >
+                <span className={`grid h-11 w-11 shrink-0 place-items-center rounded-xl text-xl ${isDone ? "bg-grad" : "bg-surface-2"}`} aria-hidden>
                   {isDone ? "✅" : meta.icon}
                 </span>
                 <div className="min-w-0 flex-1">
                   <p className="text-xs font-semibold uppercase tracking-wide text-muted">
-                    {meta.label}
-                    {started && <span className="ml-2 rounded bg-gold/20 px-1.5 py-0.5 text-[10px] text-gold">In progress</span>}
+                    {t(meta.label)}
+                    {started && <span className="ml-2 rounded bg-gold/20 px-1.5 py-0.5 text-[10px] text-gold">{t("home.inProgress")}</span>}
                   </p>
                   <p className="truncate font-medium">{q.title}</p>
                 </div>
-                <span className="shrink-0 rounded-full bg-surface-2 px-2 py-1 text-xs font-semibold tabular-nums">{q.base_points} XP</span>
+                <span className="shrink-0 rounded-full bg-accent-soft px-2.5 py-1 text-xs font-bold text-accent tabular-nums">+{q.base_points} XP</span>
               </div>
             </Link>
           );
@@ -71,11 +77,13 @@ function SetCard({ set, onSkip }: { set: QuestSet; onSkip: () => void }) {
 
 function HomeInner() {
   const { api, profile, refresh } = useApp();
+  const t = useT();
   const [feed, setFeed] = useState<Feed | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   // Safe to read localStorage here: <Gate> only mounts this after the client has loaded.
   const [inviteIssue, setInviteIssue] = useState<string | null>(readInviteIssue);
+  const achievements = useAchievements();
 
   const load = useCallback(async () => {
     try {
@@ -98,7 +106,7 @@ function HomeInner() {
 
   async function addSet(issueSlug?: string) {
     setError(null);
-    setBusy(issueSlug ? "Joining your friend's quest…" : "Finding a quest that fits you…");
+    setBusy(issueSlug ? t("home.joiningFriend") : t("home.finding"));
     try {
       const pos = profile?.permissions.location ? await getPosition() : null;
       await api("/api/quests", { body: { ...(pos ? { lat: pos.lat, lng: pos.lng } : {}), ...(issueSlug ? { issue_slug: issueSlug, invited_by: readInvite() ?? undefined } : {}) } });
@@ -134,7 +142,22 @@ function HomeInner() {
 
   return (
     <>
-      <TopBar title={`Hey ${profile?.username ?? ""} 👋`} />
+      <TopBar title="Ripple" />
+      {/* Hero banner (AI-generated art) */}
+      <div className="relative -mx-1 mb-4 overflow-hidden rounded-3xl shadow-[0_12px_32px_-12px_rgba(124,58,237,0.6)]">
+        {/* eslint-disable-next-line @next/next/no-img-element -- static asset, already compressed */}
+        <img src="/images/hero.webp" alt={t("home.heroAlt")} className="h-44 w-full object-cover" />
+        <div className="absolute inset-0 bg-gradient-to-t from-[#3b0764]/85 via-[#3b0764]/25 to-transparent" />
+        <div className="absolute inset-x-0 bottom-0 p-4 text-white">
+          <p className="font-display text-2xl font-bold drop-shadow">{t("home.greeting", { name: profile?.username ?? "" })}</p>
+          <p className="text-sm opacity-90">{t("home.tagline")}</p>
+          {achievements && (
+            <div className="mt-2">
+              <StreakPill weeks={achievements.streak.weeks} active={achievements.streak.activeThisWeek} />
+            </div>
+          )}
+        </div>
+      </div>
       <div className="mb-4">
         <ImpactCard compact />
       </div>
@@ -142,11 +165,11 @@ function HomeInner() {
 
       {inviteIssue && !hasInviteSet && (
         <Card className="mb-4 border-brand">
-          <p className="text-sm font-semibold">🤝 A friend invited you to their quest</p>
-          <p className="mt-1 text-xs text-muted">Doing the same quest helps them complete their Lead tier.</p>
+          <p className="text-sm font-semibold">{t("home.inviteTitle")}</p>
+          <p className="mt-1 text-xs text-muted">{t("home.inviteBody")}</p>
           <div className="mt-3 flex gap-2">
             <Button className="flex-1" onClick={() => addSet(inviteIssue)}>
-              Join their quest
+              {t("home.inviteJoin")}
             </Button>
             <Button
               variant="ghost"
@@ -155,17 +178,15 @@ function HomeInner() {
                 setInviteIssue(null);
               }}
             >
-              Not now
+              {t("common.notNow")}
             </Button>
           </div>
         </Card>
       )}
 
       <div className="mb-2 flex items-baseline justify-between">
-        <h2 className="text-sm font-semibold text-muted">
-          Your quests ({feed.sets.length}/{feed.maxActive})
-        </h2>
-        <p className="text-xs text-muted">Do any tier, in any order</p>
+        <h2 className="text-sm font-semibold text-muted">{t("home.yourQuests", { n: feed.sets.length, max: feed.maxActive })}</h2>
+        <p className="text-xs text-muted">{t("home.anyOrder")}</p>
       </div>
 
       <div className="space-y-4">
@@ -176,33 +197,31 @@ function HomeInner() {
         {feed.sets.length === 0 ? (
           <Card className="text-center">
             <p className="text-3xl">🌊</p>
-            <h2 className="mt-2 text-lg font-bold">{feed.completed.length ? "All caught up!" : "Ready for a quest?"}</h2>
-            <p className="mt-1 text-sm text-muted">We&apos;ll match a local issue to your interests.</p>
-            <Button className="mt-4 w-full" disabled={!canAdd} onClick={() => addSet()}>
-              Find a quest
+            <h2 className="mt-2 text-lg font-bold">{feed.completed.length ? t("home.allCaughtUp") : t("home.ready")}</h2>
+            <p className="mt-1 text-sm text-muted">{t("home.matchHint")}</p>
+            <Button variant="fun" className="mt-4 w-full" disabled={!canAdd} onClick={() => addSet()}>
+              {t("home.findQuest")}
             </Button>
           </Card>
         ) : (
-          <Button variant="soft" className="w-full" disabled={!canAdd} onClick={() => addSet()}>
-            + Add another quest
+          <Button variant="fun" className="w-full" disabled={!canAdd} onClick={() => addSet()}>
+            {t("home.addAnother")}
           </Button>
         )}
         <p className="text-center text-xs text-muted">
-          {feed.sets.length >= feed.maxActive
-            ? `You can run ${feed.maxActive} quests at once. Finish or skip one to add more.`
-            : `${feed.newLeftToday} new quests left today`}
+          {feed.sets.length >= feed.maxActive ? t("home.maxActive", { max: feed.maxActive }) : t("home.newLeft", { n: feed.newLeftToday })}
         </p>
       </div>
 
       {feed.completed.length > 0 && (
         <section className="mt-6">
-          <h3 className="mb-2 text-sm font-semibold text-muted">Recently completed</h3>
+          <h3 className="mb-2 text-sm font-semibold text-muted">{t("home.recentlyCompleted")}</h3>
           <div className="space-y-2">
             {feed.completed.map((c) => (
               <div key={c.id} className="flex items-center gap-2 text-sm">
                 <span>✅</span>
                 <span className="flex-1 truncate">{c.title}</span>
-                <span className="text-xs uppercase text-muted">{c.tier}</span>
+                <span className="text-xs uppercase text-muted">{t(TIER_META[c.tier].label)}</span>
               </div>
             ))}
           </div>

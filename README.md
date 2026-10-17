@@ -4,6 +4,8 @@
 
 Ripple turns your interests into quests about real problems in Markham and York Region. Each issue becomes a three-tier quest: **Learn** (brief + AI quiz), **Act** (a solo task verified by photo), and **Lead** (get two friends to do it too). All tiers are open, so do them in any order, and run several quests at once. Verified progress earns **XP**, which ranks you and your squad, and **coins**, which you spend at local perks. Spending coins never lowers your rank.
 
+**Also:** a map of local issues, a volunteer-hours log toward Ontario's 40-hour requirement (printable for school), weekly streaks and badges, and the interface in English, 简体中文, 繁體中文 and தமிழ்.
+
 Mobile-first Next.js web app. Open it on a phone and "Add to Home Screen" for an app-like feel.
 
 ## Stack
@@ -107,7 +109,10 @@ src/lib/ai/                Claude calls: quests, quiz, photo verification
 src/lib/server/game.ts     quest sets (parallel, all tiers open), awarding, Lead completion
 src/app/api/               route handlers (all writes use the service-role key)
 src/app/                   screens: onboarding, quests, quest detail, leaderboard, perks, profile
-src/data/                  hand-written issues, demo quests, mock perks
+src/data/                  hand-written issues, demo quests, mock perks, preference options
+src/i18n/                  translations (en is the source; zh-Hans, zh-Hant, ta)
+src/lib/badges.ts, hours.ts  streaks/badges and volunteer-hours logic (pure, unit-tested)
+public/images/             AI-generated hero art
 ```
 
 ## Notes
