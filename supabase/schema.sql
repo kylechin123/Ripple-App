@@ -2,7 +2,8 @@
 -- Safe to re-run: drops and recreates everything.
 
 drop view if exists leaderboard_users, leaderboard_squads, leaderboard_wards,
-  leaderboard_users_monthly, leaderboard_squads_monthly, leaderboard_wards_monthly cascade;
+  leaderboard_users_monthly, leaderboard_squads_monthly, leaderboard_wards_monthly,
+  global_impact, global_impact_by_type cascade;
 drop function if exists award_submission(uuid, int, int, float8) cascade;
 drop function if exists redeem_perk(uuid, uuid) cascade;
 drop table if exists redemptions, perks, squad_goals, submissions, quiz_questions, quests, issues, profiles, squads cascade;
@@ -208,7 +209,7 @@ end $$;
 
 -- ---------- Leaderboards ----------
 create view leaderboard_users as
-  select p.id, p.username, p.ward, s.name as squad_name, p.xp
+  select p.id, p.username, p.ward, s.name as squad_name, p.xp, p.squad_id
     from profiles p left join squads s on s.id = p.squad_id
    where p.onboarded;
 
@@ -223,7 +224,7 @@ create view leaderboard_wards as
    group by p.ward;
 
 create view leaderboard_users_monthly as
-  select p.id, p.username, p.ward, s.name as squad_name, coalesce(sum(sub.xp_awarded), 0)::int as xp
+  select p.id, p.username, p.ward, s.name as squad_name, coalesce(sum(sub.xp_awarded), 0)::int as xp, p.squad_id
     from profiles p
     left join squads s on s.id = p.squad_id
     left join submissions sub on sub.user_id = p.id and sub.approved
@@ -246,6 +247,22 @@ create view leaderboard_wards_monthly as
          and sub.created_at >= date_trunc('month', now())
    where p.ward is not null and p.onboarded
    group by p.ward;
+
+-- ---------- Global impact ----------
+-- One row: everyone's contribution added together.
+create view global_impact as
+  select
+    (select coalesce(sum(xp), 0) from profiles where onboarded)::int as total_xp,
+    (select coalesce(sum(xp_awarded), 0) from submissions where approved and created_at >= date_trunc('month', now()))::int as month_xp,
+    (select count(*) from submissions where approved)::int as quests_completed,
+    (select count(*) from profiles where onboarded)::int as members,
+    (select count(distinct q.issue_id) from quests q where q.status = 'completed')::int as issues_tackled;
+
+create view global_impact_by_type as
+  select task_type, count(*)::int as completed, coalesce(sum(xp_awarded), 0)::int as xp
+    from submissions
+   where approved and task_type is not null
+   group by task_type;
 
 -- ---------- RLS ----------
 -- All writes go through Next.js API routes using the service-role key.
@@ -277,6 +294,8 @@ alter view leaderboard_wards set (security_invoker = true);
 alter view leaderboard_users_monthly set (security_invoker = true);
 alter view leaderboard_squads_monthly set (security_invoker = true);
 alter view leaderboard_wards_monthly set (security_invoker = true);
+alter view global_impact set (security_invoker = true);
+alter view global_impact_by_type set (security_invoker = true);
 
 -- ---------- Storage: private bucket, users upload only into their own folder ----------
 insert into storage.buckets (id, name, public) values ('proofs', 'proofs', false)

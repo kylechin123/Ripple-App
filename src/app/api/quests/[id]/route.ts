@@ -3,7 +3,6 @@ import {
   attemptsUsed,
   bumpCategory,
   ensureQuiz,
-  isUnlocked,
   leadProgress,
   MAX_ATTEMPTS_PER_QUEST,
   PROOF_WINDOW_HOURS,
@@ -26,11 +25,10 @@ export const GET = handler(async (req, ctx: { params: Promise<{ id: string }> })
   const quest = await loadQuest(id, profile.id);
   const siblings = await setQuests(quest.set_id, profile.id);
   const { data: issue } = await supabaseAdmin().from("issues").select("*").eq("id", quest.issue_id).single();
-  const unlocked = isUnlocked(quest, siblings);
 
   // Learn tier carries the brief; act/lead show it too so users can re-read.
   const learn = siblings.find((q) => q.tier === "learn");
-  const quiz = quest.tier === "learn" && unlocked && quest.status !== "completed" ? await ensureQuiz(quest, (issue as Issue).slug) : null;
+  const quiz = quest.tier === "learn" && quest.status !== "completed" ? await ensureQuiz(quest, (issue as Issue).slug) : null;
   const lead = quest.tier === "lead" ? await leadProgress(profile, quest.issue_id) : null;
   const attempts = await attemptsUsed(quest.id);
 
@@ -38,12 +36,11 @@ export const GET = handler(async (req, ctx: { params: Promise<{ id: string }> })
     quest,
     issue,
     brief: learn?.brief_md ?? "",
-    unlocked,
     quiz,
     lead,
     attemptsLeft: Math.max(0, MAX_ATTEMPTS_PER_QUEST - attempts),
     proofWindowHours: PROOF_WINDOW_HOURS,
-    siblings: siblings.map((q) => ({ id: q.id, tier: q.tier, status: q.status, title: q.title, unlocked: isUnlocked(q, siblings) })),
+    siblings: siblings.map((q) => ({ id: q.id, tier: q.tier, status: q.status, title: q.title })),
     inviteUrl: `/?invite=${profile.id}&issue=${encodeURIComponent((issue as Issue).slug)}`,
   });
 });
@@ -59,7 +56,7 @@ export const POST = handler(async (req, ctx: { params: Promise<{ id: string }> }
   const db = supabaseAdmin();
 
   if (action === "accept") {
-    if (!isUnlocked(quest, siblings)) throw new HttpError(403, "Finish the previous tier first");
+    if (quest.status === "skipped") throw new HttpError(409, "You skipped this quest. Add a new one from the home screen.");
     if (quest.status === "offered") {
       await db.from("quests").update({ status: "accepted", accepted_at: new Date().toISOString() }).eq("id", quest.id);
     }

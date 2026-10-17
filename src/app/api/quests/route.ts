@@ -1,25 +1,23 @@
 import { z } from "zod";
-import { createQuestSet, isUnlocked, MAX_REROLLS_PER_DAY, setQuests } from "@/lib/server/game";
+import { activeSets, createQuestSet, MAX_ACTIVE_SETS, newSetsLeftToday, setQuests } from "@/lib/server/game";
 import { handler, requireProfile, supabaseAdmin } from "@/lib/supabase/server";
-import type { Quest } from "@/lib/types";
+import type { Issue } from "@/lib/types";
 
 export const maxDuration = 60;
 
-/** The user's current quest set (most recent set that still has an open quest). */
+/** All of the user's in-progress quest sets, newest first. Every tier is open. */
 export const GET = handler(async (req) => {
   const profile = await requireProfile(req);
   const db = supabaseAdmin();
-  const { data: latest } = await db
-    .from("quests")
-    .select("set_id")
-    .eq("user_id", profile.id)
-    .in("status", ["offered", "accepted"])
-    .order("created_at", { ascending: false })
-    .limit(1)
-    .maybeSingle();
+  const active = await activeSets(profile.id);
 
-  const today = new Date().toISOString().slice(0, 10);
-  const rerollsLeft = MAX_REROLLS_PER_DAY - (profile.rerolls_date === today ? profile.rerolls_today : 0);
+  const sets = await Promise.all(
+    [...active.keys()].map(async (setId) => {
+      const quests = await setQuests(setId, profile.id);
+      const { data: issue } = await db.from("issues").select("*").eq("id", quests[0].issue_id).single();
+      return { setId, issue: issue as Issue, matchReason: quests[0].match_reason, quests };
+    }),
+  );
 
   const { data: done } = await db
     .from("quests")
@@ -29,18 +27,10 @@ export const GET = handler(async (req) => {
     .order("completed_at", { ascending: false })
     .limit(10);
 
-  if (!latest) return Response.json({ set: null, rerollsLeft, completed: done ?? [] });
-
-  const quests = await setQuests(latest.set_id, profile.id);
-  const { data: issue } = await db.from("issues").select("*").eq("id", quests[0].issue_id).single();
   return Response.json({
-    set: {
-      setId: latest.set_id,
-      issue,
-      matchReason: quests[0].match_reason,
-      quests: quests.map((q: Quest) => ({ ...q, unlocked: isUnlocked(q, quests) })),
-    },
-    rerollsLeft,
+    sets,
+    maxActive: MAX_ACTIVE_SETS,
+    newLeftToday: Math.max(0, newSetsLeftToday(profile)),
     completed: done ?? [],
   });
 });
@@ -48,11 +38,11 @@ export const GET = handler(async (req) => {
 const Body = z.object({
   lat: z.number().min(-90).max(90).optional(),
   lng: z.number().min(-180).max(180).optional(),
-  reroll: z.boolean().optional(),
   issue_slug: z.string().max(80).optional(), // from a friend's invite link
   invited_by: z.string().uuid().optional(),
 });
 
+/** Add another quest set (runs in parallel with the others). */
 export const POST = handler(async (req) => {
   const profile = await requireProfile(req);
   const body = Body.parse(await req.json().catch(() => ({})));
@@ -64,6 +54,6 @@ export const POST = handler(async (req) => {
   }
   // Location is used for this request only and never stored.
   const loc = profile.permissions.location && body.lat != null && body.lng != null ? { lat: body.lat, lng: body.lng } : null;
-  const result = await createQuestSet(profile, loc, Boolean(body.reroll) && !body.issue_slug, body.issue_slug);
+  const result = await createQuestSet(profile, loc, body.issue_slug);
   return Response.json(result);
 });

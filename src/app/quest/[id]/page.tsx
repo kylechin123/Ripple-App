@@ -15,12 +15,11 @@ type Detail = {
   quest: Quest;
   issue: Issue;
   brief: string;
-  unlocked: boolean;
   quiz: PublicQuizQuestion[] | null;
   lead: { done: number; required: number } | null;
   attemptsLeft: number;
   proofWindowHours: number;
-  siblings: { id: string; tier: Quest["tier"]; status: Quest["status"]; title: string; unlocked: boolean }[];
+  siblings: { id: string; tier: Quest["tier"]; status: Quest["status"]; title: string }[];
   inviteUrl: string;
 };
 
@@ -116,7 +115,8 @@ function QuestInner() {
   const { quest, issue } = d;
   const done = quest.status === "completed";
   const started = quest.status === "accepted";
-  const next = d.siblings.find((s) => s.tier === (quest.tier === "learn" ? "act" : quest.tier === "act" ? "lead" : null));
+  // Suggest whichever tier in this set is still open (tiers can be done in any order).
+  const next = d.siblings.find((s) => s.id !== quest.id && s.status !== "completed" && s.status !== "skipped");
 
   return (
     <div className="pt-4">
@@ -128,11 +128,10 @@ function QuestInner() {
         {d.siblings.map((s) => (
           <Link
             key={s.id}
-            href={s.unlocked || s.status === "completed" ? `/quest/${s.id}` : "#"}
-            aria-disabled={!s.unlocked}
-            className={`flex-1 rounded-lg py-2 text-center text-xs font-semibold ${s.id === quest.id ? "bg-surface shadow-sm" : "text-muted"} ${!s.unlocked ? "pointer-events-none opacity-50" : ""}`}
+            href={`/quest/${s.id}`}
+            className={`flex-1 rounded-lg py-2 text-center text-xs font-semibold ${s.id === quest.id ? "bg-surface shadow-sm" : "text-muted"}`}
           >
-            {s.status === "completed" ? "✅ " : !s.unlocked ? "🔒 " : ""}
+            {s.status === "completed" ? "✅ " : s.status === "accepted" ? "⏳ " : ""}
             {TIER_LABEL[s.tier]}
           </Link>
         ))}
@@ -174,7 +173,7 @@ function QuestInner() {
         {!busy && done && (
           <Card className="text-center">
             <p className="font-semibold">✅ Completed</p>
-            {next && next.unlocked && next.status !== "completed" ? (
+            {next ? (
               <Link href={`/quest/${next.id}`}>
                 <Button className="mt-3 w-full">Next: {TIER_LABEL[next.tier]} →</Button>
               </Link>

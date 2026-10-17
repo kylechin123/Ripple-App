@@ -11,7 +11,10 @@ import type { AwardResult, Issue, Profile, Quest } from "@/lib/types";
 
 const db = () => supabaseAdmin();
 
-export const MAX_REROLLS_PER_DAY = 3;
+// Quests run in parallel, so these caps stop users generating dozens of sets
+// and cherry-picking whichever ones the AI happened to over-score.
+export const MAX_ACTIVE_SETS = 3;
+export const MAX_NEW_SETS_PER_DAY = 6;
 export const MAX_ATTEMPTS_PER_QUEST = 3;
 export const PROOF_WINDOW_HOURS = 48;
 export const LEAD_FRIENDS_REQUIRED = 2;
@@ -50,12 +53,30 @@ async function recentlySkippedSlugs(userId: string): Promise<string[]> {
   return [...new Set(slugs)];
 }
 
-function demoSetFor(candidates: Issue[], avoid: string[]): GeneratedSet {
-  const pick =
-    candidates.find((i) => DEMO_QUESTS[i.slug] && !avoid.includes(i.slug)) ??
-    candidates.find((i) => DEMO_QUESTS[i.slug]) ??
-    ({ slug: Object.keys(DEMO_QUESTS)[0] } as Issue);
-  return DEMO_QUESTS[pick.slug].set;
+function demoSetFor(candidates: Issue[], avoid: string[]): GeneratedSet | null {
+  const pick = candidates.find((i) => DEMO_QUESTS[i.slug] && !avoid.includes(i.slug)) ?? candidates.find((i) => DEMO_QUESTS[i.slug]);
+  return pick ? DEMO_QUESTS[pick.slug].set : null;
+}
+
+/** Sets with at least one quest still in progress, and the issues they cover. */
+export async function activeSets(userId: string) {
+  const { data, error } = await db()
+    .from("quests")
+    .select("set_id, created_at, issues(slug)")
+    .eq("user_id", userId)
+    .in("status", ["offered", "accepted"])
+    .order("created_at", { ascending: false });
+  if (error) throw error;
+  const sets = new Map<string, string>();
+  for (const r of data ?? []) {
+    if (!sets.has(r.set_id)) sets.set(r.set_id, (r.issues as unknown as { slug: string } | null)?.slug ?? "");
+  }
+  return sets; // set_id -> issue slug, newest first
+}
+
+export function newSetsLeftToday(profile: Profile) {
+  const today = new Date().toISOString().slice(0, 10);
+  return MAX_NEW_SETS_PER_DAY - (profile.rerolls_date === today ? profile.rerolls_today : 0);
 }
 
 function questRow(
@@ -88,28 +109,27 @@ function questRow(
   };
 }
 
-/** Generate a new learn/act/lead trio. Any unfinished offered/accepted quests are marked skipped. */
-export async function createQuestSet(profile: Profile, loc: { lat: number; lng: number } | null, isReroll: boolean, forcedSlug?: string) {
-  if (isReroll) {
-    const today = new Date().toISOString().slice(0, 10);
-    const used = profile.rerolls_date === today ? profile.rerolls_today : 0;
-    if (used >= MAX_REROLLS_PER_DAY) throw new HttpError(429, `You've used all ${MAX_REROLLS_PER_DAY} rerolls today`);
-    await db().from("profiles").update({ rerolls_today: used + 1, rerolls_date: today }).eq("id", profile.id);
+/**
+ * Add a new learn/act/lead trio alongside the user's other active sets.
+ * Never duplicates an issue the user already has in progress.
+ */
+export async function createQuestSet(profile: Profile, loc: { lat: number; lng: number } | null, forcedSlug?: string) {
+  const active = await activeSets(profile.id);
+  const activeSlugs = new Set(active.values());
+
+  // Joining a friend's issue you already have: just point at the existing set.
+  if (forcedSlug && activeSlugs.has(forcedSlug)) {
+    const setId = [...active].find(([, slug]) => slug === forcedSlug)![0];
+    return { setId, source: "existing" as const };
+  }
+  if (active.size >= MAX_ACTIVE_SETS) {
+    throw new HttpError(409, `You have ${MAX_ACTIVE_SETS} quests going. Finish or skip one to add another.`);
+  }
+  if (newSetsLeftToday(profile) <= 0) {
+    throw new HttpError(429, `You've added ${MAX_NEW_SETS_PER_DAY} new quests today. Come back tomorrow for more.`);
   }
 
-  // Retire the current set (only quests that aren't done).
-  const { data: open } = await db()
-    .from("quests")
-    .select("id, issue_id, issues(category)")
-    .eq("user_id", profile.id)
-    .in("status", ["offered", "accepted"]);
-  if (open?.length) {
-    await db().from("quests").update({ status: "skipped" }).in("id", open.map((q) => q.id));
-    const category = (open[0].issues as unknown as { category: string } | null)?.category;
-    if (isReroll && category) await bumpCategory(profile, category, -0.2);
-  }
-
-  let candidates = await candidateIssues(profile, loc);
+  let candidates = (await candidateIssues(profile, loc)).filter((i) => !activeSlugs.has(i.slug));
   let avoid = await recentlySkippedSlugs(profile.id);
   if (forcedSlug) {
     const { data: forced } = await db().from("issues").select("*").eq("slug", forcedSlug).maybeSingle();
@@ -118,8 +138,9 @@ export async function createQuestSet(profile: Profile, loc: { lat: number; lng: 
       avoid = [];
     }
   }
+  if (!candidates.length) throw new HttpError(409, "You already have quests for every issue near you. Finish one to unlock more.");
 
-  let set: GeneratedSet;
+  let set: GeneratedSet | null = null;
   let source: "ai" | "demo" = "demo";
   if (aiEnabled()) {
     try {
@@ -127,11 +148,17 @@ export async function createQuestSet(profile: Profile, loc: { lat: number; lng: 
       source = "ai";
     } catch (err) {
       console.error("Quest generation failed; falling back to demo quests", err);
-      set = demoSetFor(candidates, avoid);
     }
-  } else {
-    set = demoSetFor(candidates, avoid);
   }
+  set ??= demoSetFor(candidates, avoid);
+  if (!set) throw new HttpError(409, "You already have quests for every issue near you. Finish one to unlock more.");
+
+  // Count toward the daily cap only once a set is actually being created.
+  const today = new Date().toISOString().slice(0, 10);
+  const used = profile.rerolls_date === today ? profile.rerolls_today : 0;
+  await db().from("profiles").update({ rerolls_today: used + 1, rerolls_date: today }).eq("id", profile.id);
+  profile.rerolls_today = used + 1;
+  profile.rerolls_date = today;
 
   let issue = candidates.find((i) => i.slug === set.issue_slug);
   if (!issue) {
@@ -188,19 +215,14 @@ export async function ensureQuiz(quest: Quest, issueSlug: string) {
   return data ?? [];
 }
 
-// ---------- Unlocking ----------
+// ---------- Sets ----------
+// All tiers are open from the start: Learn, Act and Lead can be done in any order.
 
 export async function setQuests(setId: string, userId: string): Promise<Quest[]> {
   const { data, error } = await db().from("quests").select("*").eq("set_id", setId).eq("user_id", userId);
   if (error) throw error;
   const order: Record<Tier, number> = { learn: 0, act: 1, lead: 2 };
   return ((data ?? []) as Quest[]).sort((a, b) => order[a.tier] - order[b.tier]);
-}
-
-export function isUnlocked(quest: Quest, siblings: Quest[]) {
-  if (quest.tier === "learn") return true;
-  const prev = siblings.find((q) => q.tier === (quest.tier === "act" ? "learn" : "act"));
-  return prev?.status === "completed";
 }
 
 // ---------- Behavior learning ----------
@@ -283,8 +305,6 @@ export async function leadProgress(leader: Profile, issueId: string) {
 export async function checkLeadCompletions(issueId: string) {
   const { data: leads } = await db().from("quests").select("*").eq("issue_id", issueId).eq("tier", "lead").in("status", ["offered", "accepted"]);
   for (const lead of (leads ?? []) as Quest[]) {
-    const siblings = await setQuests(lead.set_id, lead.user_id);
-    if (!isUnlocked(lead, siblings)) continue;
     const { data: leader } = await db().from("profiles").select("*").eq("id", lead.user_id).single();
     if (!leader) continue;
     const { done, required } = await leadProgress(leader as Profile, issueId);

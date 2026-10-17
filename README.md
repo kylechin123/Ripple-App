@@ -2,7 +2,7 @@
 
 **Turn "I should help" into "I helped": personalized, verified, and rewarded locally.**
 
-Ripple turns your interests into quests about real problems in Markham and York Region. Each issue becomes a three-tier quest: **Learn** (brief + AI quiz), **Act** (a solo task verified by photo), and **Lead** (get two friends to do it too). Verified progress earns **XP**, which ranks you and your squad, and **coins**, which you spend at local perks. Spending coins never lowers your rank.
+Ripple turns your interests into quests about real problems in Markham and York Region. Each issue becomes a three-tier quest: **Learn** (brief + AI quiz), **Act** (a solo task verified by photo), and **Lead** (get two friends to do it too). All tiers are open, so do them in any order, and run several quests at once. Verified progress earns **XP**, which ranks you and your squad, and **coins**, which you spend at local perks. Spending coins never lowers your rank.
 
 Mobile-first Next.js web app. Open it on a phone and "Add to Home Screen" for an app-like feel.
 
@@ -60,7 +60,7 @@ The anti-gaming rules, all enforced on the server:
 - **The AI scores the rubric, then the server clamps it** to fixed ranges per task type. Users never set points, and the client only ever sends a quest id.
 - **Difficulty is derived from the rubric.** That's why a harder quest always beats an easier one; `points.test.ts` checks this property for every rubric and user state.
 - **New users start at exactly 1.0×.** The stretch bonus only builds up from verified history, is capped at 1.5×, and your level never goes down, so sandbagging doesn't pay.
-- **Skips never touch the multiplier**; they only teach Ripple which topics you like. Rerolls are limited to 3 per day.
+- **Skips never touch the multiplier**; they only teach Ripple which topics you like. You can run up to 3 quest sets at once and add 6 new ones per day, so nobody can farm quests the AI happened to over-score.
 - **Repeating the same kind of task** has diminishing returns.
 
 ### Verification
@@ -83,7 +83,7 @@ Before the demo, set `DEMO_MODE=true` and `NEXT_PUBLIC_DEMO_MODE=true` if the ve
 2. A quest appears that matches her interests. **Learn:** read the brief and pass the quiz; the XP breakdown shows `base × stretch × repeat`.
 3. **Act:** take a photo; GPS and the AI check pass, and XP is awarded.
 4. **Anti-gaming:** start a new quest set and submit the same photo, which is rejected as a duplicate. Mention that the rubric is locked server-side and that repeats decay.
-5. **Ranks:** your squad moves up the board. **Perks:** redeem a bubble tea; your coins drop but your XP and rank stay the same.
+5. **Ranks:** the 🌍 Total global impact card adds up everyone's contribution. Switch between **Global**, **My squad**, **Squads** and **Wards**. **Perks:** redeem a bubble tea; your coins drop but your XP and rank stay the same.
 6. Close with the business model: local businesses get cheap foot traffic and community goodwill.
 
 ## Scripts
@@ -99,11 +99,12 @@ Before the demo, set `DEMO_MODE=true` and `NEXT_PUBLIC_DEMO_MODE=true` if the ve
 ## Project layout
 
 ```
-supabase/schema.sql        tables, RLS, atomic award/redeem functions, leaderboard views
+supabase/schema.sql        tables, RLS, atomic award/redeem functions, leaderboard + impact views
+supabase/migrations/       non-destructive upgrades for an existing database
 scripts/seed.ts            seed data loader
 src/lib/points.ts          points engine (pure, unit-tested)
 src/lib/ai/                Claude calls: quests, quiz, photo verification
-src/lib/server/game.ts     quest sets, unlocking, awarding, Lead completion
+src/lib/server/game.ts     quest sets (parallel, all tiers open), awarding, Lead completion
 src/app/api/               route handlers (all writes use the service-role key)
 src/app/                   screens: onboarding, quests, quest detail, leaderboard, perks, profile
 src/data/                  hand-written issues, demo quests, mock perks
